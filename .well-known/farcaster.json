@@ -1,9 +1,10 @@
 {
+  "name": "DigBase",
+  "iconUrl": "https://hightofive.vercel.app/icon.png",
+  "homeUrl": "https://hightofive.vercel.app",
   "frame": {
-    "name": "DigBase",
     "version": "1",
-    "iconUrl": "https://hightofive.vercel.app/icon.png",
-    "homeUrl": "https://hightofive.vercel.app",
+    "postUrl": "https://hightofive.vercel.app/frames",
     "imageUrl": "https://hightofive.vercel.app/image.png",
     "splashImageUrl": "https://hightofive.vercel.app/splash.png",
     "splashBackgroundColor": "#6200EA",
@@ -11,10 +12,5 @@
     "subtitle": "DigBase - the dig app",
     "description": "DigBase - the dig app",
     "primaryCategory": "games"
-  },
-  "accountAssociation": {
-    "header": "",
-    "payload": "",
-    "signature": ""
   }
 }
