@@ -5,22 +5,20 @@ import { useState, useEffect } from "react";
 const GRID_SIZE = 7;
 const TOTAL_CELLS = GRID_SIZE * GRID_SIZE;
 
-// Returns random positions for gem and bombs
 function generateBoard() {
   const gemIndex = Math.floor(Math.random() * TOTAL_CELLS);
 
-  const bombs = new Set<number>();
-  while (bombs.size < 3) {
-    const index = Math.floor(Math.random() * TOTAL_CELLS);
-    if (index !== gemIndex) bombs.add(index);
+  let bombs: number[] = [];
+  while (bombs.length < 3) {
+    const r = Math.floor(Math.random() * TOTAL_CELLS);
+    if (r !== gemIndex && !bombs.includes(r)) {
+      bombs.push(r);
+    }
   }
 
-  console.log("✅ Board generated:", { gemIndex, bombs: [...bombs] });
+  console.log("✅ Board generated:", { gemIndex, bombs });
 
-  return {
-    gemIndex,
-    bombs: [...bombs],
-  };
+  return { gemIndex, bombs };
 }
 
 export default function DigBaseApp() {
@@ -37,8 +35,6 @@ export default function DigBaseApp() {
 
   function handleClick(index: number) {
     if (!board || status !== "PLAYING" || revealed.includes(index)) return;
-
-    console.log("Clicked:", index);
 
     setRevealed((prev) => [...prev, index]);
     setRemainingClicks((prev) => prev - 1);
@@ -86,9 +82,9 @@ export default function DigBaseApp() {
         }}
       >
         {Array.from({ length: TOTAL_CELLS }).map((_, index) => {
-          const isGem = board.gemIndex === index && revealed.includes(index);
-          const isBomb = board.bombs.includes(index) && revealed.includes(index);
           const isRevealed = revealed.includes(index);
+          const isGem = index === board.gemIndex && isRevealed;
+          const isBomb = board.bombs.includes(index) && isRevealed;
 
           return (
             <div
@@ -102,12 +98,12 @@ export default function DigBaseApp() {
                     ? "gold"
                     : isBomb
                     ? "red"
-                    : "grey"
+                    : "gray"
                   : "green",
                 display: "flex",
                 justifyContent: "center",
                 alignItems: "center",
-                fontSize: "18px",
+                fontSize: "20px",
                 cursor: "pointer",
               }}
             >
