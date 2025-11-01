@@ -9,7 +9,10 @@ export async function POST(req: Request) {
   const db = supabaseServer()
 
   // ensure table
-  await db.rpc('noop').catch(() => {}) // harmless
+try {
+  await db.rpc('noop')
+} catch (_) {}
+
 
   // upsert profile
   const { data, error } = await db
