@@ -1,12 +1,7 @@
-"use client";
+'use client'
 
-import DigBaseApp from "@/components/dig/DigBaseApp";
-import { Providers } from "@/components/providers";
+import DigBaseApp from '@/components/dig/DigBaseApp'
 
-export default function Page() {
-  return (
-    <Providers>
-      <DigBaseApp />
-    </Providers>
-  );
+export default function Home() {
+  return <DigBaseApp />
 }
