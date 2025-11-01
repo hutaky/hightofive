@@ -1,5 +1,4 @@
-"use client";
-
+'use client'
 import type { Context } from '@farcaster/frame-sdk'
 import sdk from '@farcaster/frame-sdk'
 import { useQuery } from '@tanstack/react-query'
@@ -13,23 +12,17 @@ interface FrameContextValue {
   actions: typeof sdk.actions | undefined
 }
 
-const FrameProviderContext = createContext<FrameContextValue | undefined>(
-  undefined,
-)
+const FrameProviderContext = createContext<FrameContextValue | undefined>(undefined)
 
 export function useFrame() {
   const context = useContext(FrameProviderContext)
   if (context === undefined) {
-    throw new Error('useFrame must be used within a FarcasterProvider')
+    throw new Error('useFrame must be used within a FrameProvider')
   }
   return context
 }
 
-interface FarcasterProviderProps {
-  children: ReactNode
-}
-
-export function FarcasterProvider({ children }: FarcasterProviderProps) {
+export function FrameProvider({ children }: { children: ReactNode }) {
   const farcasterContextQuery = useQuery({
     queryKey: ['farcaster-context'],
     queryFn: async () => {
@@ -37,10 +30,9 @@ export function FarcasterProvider({ children }: FarcasterProviderProps) {
       try {
         await sdk.actions.ready()
         return { context, isReady: true }
-      } catch (err) {
-        console.error('SDK initialization error:', err)
+      } catch {
+        return { context, isReady: false }
       }
-      return { context, isReady: false }
     },
   })
 
@@ -60,5 +52,3 @@ export function FarcasterProvider({ children }: FarcasterProviderProps) {
     </FrameProviderContext.Provider>
   )
 }
-
-export default FarcasterProvider;

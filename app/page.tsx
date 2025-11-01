@@ -1,13 +1,11 @@
-"use client";
-
-import FarcasterProvider from "@/components/farcaster-provider";
-import DigBaseApp from "@/components/dig/DigBaseApp";
+'use client'
+import DigBaseApp from '@/components/dig/DigBaseApp'
+import { Providers } from '@/components/providers'
 
 export default function Home() {
   return (
-    <FarcasterProvider>
+    <Providers>
       <DigBaseApp />
-    </FarcasterProvider>
-  );
+    </Providers>
+  )
 }
-
