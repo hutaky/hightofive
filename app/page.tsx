@@ -1,10 +1,7 @@
 "use client";
 
-import type { Context } from '@farcaster/frame-sdk'
-import sdk from '@farcaster/frame-sdk'
-import { useQuery } from '@tanstack/react-query'
-import { type ReactNode, createContext, useContext } from 'react'
-
+import FarcasterProvider from "@/components/farcaster-provider";
+import DigBaseApp from "@/components/dig/DigBaseApp";
 
 export default function Home() {
   return (
@@ -13,3 +10,4 @@ export default function Home() {
     </FarcasterProvider>
   );
 }
+
