@@ -1,4 +1,5 @@
 'use client'
+
 import type { Context } from '@farcaster/frame-sdk'
 import sdk from '@farcaster/frame-sdk'
 import { useQuery } from '@tanstack/react-query'
@@ -15,36 +16,32 @@ interface FrameContextValue {
 const FrameProviderContext = createContext<FrameContextValue | undefined>(undefined)
 
 export function useFrame() {
-  const context = useContext(FrameProviderContext)
-  if (context === undefined) {
-    throw new Error('useFrame must be used within a FrameProvider')
-  }
-  return context
+  const ctx = useContext(FrameProviderContext)
+  if (!ctx) throw new Error('useFrame must be used within FrameProvider')
+  return ctx
 }
 
 export function FrameProvider({ children }: { children: ReactNode }) {
-  const farcasterContextQuery = useQuery({
+  const q = useQuery({
     queryKey: ['farcaster-context'],
     queryFn: async () => {
       const context = await sdk.context
       try {
         await sdk.actions.ready()
-        return { context, isReady: true }
+        return { context, ready: true }
       } catch {
-        return { context, isReady: false }
+        return { context, ready: false }
       }
     },
   })
 
-  const isReady = farcasterContextQuery.data?.isReady ?? false
-
   return (
     <FrameProviderContext.Provider
       value={{
-        context: farcasterContextQuery.data?.context,
+        context: q.data?.context,
         actions: sdk.actions,
-        isLoading: farcasterContextQuery.isPending,
-        isSDKLoaded: isReady && Boolean(farcasterContextQuery.data?.context),
+        isLoading: q.isPending,
+        isSDKLoaded: Boolean(q.data?.ready && q.data?.context),
         isEthProviderAvailable: Boolean(sdk.wallet.ethProvider),
       }}
     >
