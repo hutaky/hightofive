@@ -6,7 +6,7 @@ export async function GET() {
     // TODO: Add account association
     frame: {
       version: "1",
-      name: "Monad Farcaster MiniApp Template",
+      name: "DigBase App",
       iconUrl: `${APP_URL}/images/icon.png`,
       homeUrl: `${APP_URL}`,
       imageUrl: `${APP_URL}/images/feed.png`,
