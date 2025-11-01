@@ -1,213 +1,229 @@
-"use client";
+'use client'
 
-import { useEffect, useState } from "react";
-import { useFrame } from "@/components/farcaster-provider";
-import { supabase } from "@/lib/supabase";
+import { useEffect, useMemo, useState } from 'react'
+import { useQuery, useMutation } from '@tanstack/react-query'
+import { useFrame } from '@/components/farcaster-provider'
 
-const GRID_SIZE = 7;
-const MAX_CLICKS = 30;
-const BASE_REWARD = 250;
-const BONUS_ON_WIN = 100;
-const MIN_REWARD_ON_FAIL = 1;
+type Cell = {
+  idx: number
+  hasGem: boolean
+  hasBomb: boolean
+  revealed: boolean
+}
+
+type Profile = {
+  fid: number
+  username: string
+  avatar_url?: string
+  points_total: number
+  last_play_at: string | null
+}
+
+const BOARD_SIZE = 7
+const TOTAL_CELLS = BOARD_SIZE * BOARD_SIZE
+const CLICKS_MAX = 30
+
+function genBoard(seed?: string) {
+  // random but stable per seed if provided (optional)
+  const rand = Math.random
+  const gemIndex = Math.floor(rand() * TOTAL_CELLS)
+
+  const bombs = new Set<number>()
+  while (bombs.size < 3) {
+    const b = Math.floor(rand() * TOTAL_CELLS)
+    if (b !== gemIndex) bombs.add(b)
+  }
+
+  const cells: Cell[] = Array.from({ length: TOTAL_CELLS }, (_, idx) => ({
+    idx,
+    hasGem: idx === gemIndex,
+    hasBomb: bombs.has(idx),
+    revealed: false,
+  }))
+
+  return { cells, gemIndex, bombIndexes: Array.from(bombs) }
+}
+
+function secondsUntilMidnightUTC() {
+  const now = new Date()
+  const midnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0))
+  return Math.max(0, Math.floor((midnight.getTime() - now.getTime()) / 1000))
+}
 
 export default function DigBaseApp() {
-  const { context } = useFrame();
-  const fid = context?.user?.fid ?? null;
-  const username = context?.user?.username ?? "Guest";
-  const avatar = context?.user?.pfpUrl ?? null;
+  const { context } = useFrame()
+  const fid = context?.user?.fid
+  const username = context?.user?.username || 'guest'
+  const avatar = context?.user?.profileImage?.url
 
-  const [cells, setCells] = useState<(null | "empty" | "bomb" | "gem")[]>([]);
-  const [revealed, setRevealed] = useState<boolean[]>([]);
-  const [reward, setReward] = useState(BASE_REWARD);
-  const [clicksLeft, setClicksLeft] = useState(MAX_CLICKS);
-  const [gameOver, setGameOver] = useState(false);
-  const [result, setResult] = useState<"WIN" | "LOSE" | null>(null);
-  const [userPoints, setUserPoints] = useState(0);
-  const [canPlay, setCanPlay] = useState(false);
-  const [retryInSeconds, setRetryInSeconds] = useState(0);
+  // ------- Profile load/upsert -------
+  const profileQuery = useQuery<Profile>({
+    queryKey: ['profile', fid || 'guest'],
+    enabled: !!fid,
+    queryFn: async () => {
+      const res = await fetch('/api/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fid, username, avatar_url: avatar }),
+      })
+      if (!res.ok) throw new Error('profile error')
+      return res.json()
+    },
+  })
 
-  // ✅ Generate board once
+  const canPlayQuery = useQuery<{ canPlay: boolean; seconds: number }>({
+    queryKey: ['can-play', fid || 'guest'],
+    enabled: !!fid,
+    queryFn: async () => {
+      const res = await fetch(`/api/can-play?fid=${fid}`)
+      if (!res.ok) throw new Error('can-play error')
+      return res.json()
+    },
+  })
+
+  // ------- Game state -------
+  const [board, setBoard] = useState<Cell[]>([])
+  const [reward, setReward] = useState<number>(250)
+  const [clicksLeft, setClicksLeft] = useState<number>(CLICKS_MAX)
+  const [status, setStatus] = useState<'IDLE' | 'PLAYING' | 'WIN' | 'LOSE'>('IDLE')
+  const allowPlay = (canPlayQuery.data?.canPlay ?? true) && status !== 'PLAYING' && status !== 'WIN' && status !== 'LOSE'
+
   useEffect(() => {
-    const arr = Array(GRID_SIZE * GRID_SIZE).fill("empty");
-    const gemIndex = Math.floor(Math.random() * arr.length);
-    arr[gemIndex] = "gem";
+    setBoard(genBoard().cells)
+    setReward(250)
+    setClicksLeft(CLICKS_MAX)
+    setStatus('PLAYING')
+  }, [fid]) // new user/context resets board
 
-    let placed = 0;
-    while (placed < 3) {
-      const i = Math.floor(Math.random() * arr.length);
-      if (arr[i] === "empty") {
-        arr[i] = "bomb";
-        placed++;
-      }
+  // ------- Finish mutation (save to supabase) -------
+  const finishMutation = useMutation({
+    mutationFn: async (finalReward: number) => {
+      const res = await fetch('/api/finish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fid, username, avatar_url: avatar, reward: finalReward }),
+      })
+      if (!res.ok) throw new Error('finish error')
+      return res.json() as Promise<{ points_total: number }>
+    },
+  })
+
+  const onCellClick = (c: Cell) => {
+    if (status !== 'PLAYING') return
+    if (!allowPlay) return
+    if (c.revealed) return
+
+    const newBoard = board.slice()
+    newBoard[c.idx] = { ...c, revealed: true }
+    setBoard(newBoard)
+
+    // every click costs -1
+    const nextRewardRaw = reward - 1
+    let nextReward = nextRewardRaw
+
+    if (c.hasBomb) {
+      // -10%
+      nextReward = Math.floor(nextRewardRaw - nextRewardRaw * 0.1)
     }
 
-    setCells(arr);
-    setRevealed(Array(arr.length).fill(false));
-  }, []);
-
-  // ✅ Load player score + check daily limit
-  useEffect(() => {
-    if (!fid) return;
-
-    const checkUser = async () => {
-      const { data } = await supabase
-        .from("scores")
-        .select("*")
-        .eq("fid", fid)
-        .maybeSingle();
-
-      if (data?.last_play_date) {
-        const lastDate = new Date(data.last_play_date);
-        const today = new Date();
-        const diff = today.getDate() - lastDate.getDate();
-
-        if (diff === 0) {
-          setCanPlay(false);
-          const midnight = new Date();
-          midnight.setHours(24, 0, 0, 0);
-          setRetryInSeconds(Math.floor((midnight.getTime() - Date.now()) / 1000));
-        } else {
-          setCanPlay(true);
-        }
-      } else {
-        setCanPlay(true);
-      }
-
-      if (data?.total_score) {
-        setUserPoints(data.total_score);
-      }
-    };
-
-    checkUser();
-  }, [fid]);
-
-  // ✅ countdown timer
-  useEffect(() => {
-    if (retryInSeconds <= 0) return;
-    const interval = setInterval(() => {
-      setRetryInSeconds((v) => v - 1);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [retryInSeconds]);
-
-  async function saveScore(finalScore: number) {
-    if (!fid) return;
-
-    const { data } = await supabase
-      .from("scores")
-      .select("*")
-      .eq("fid", fid)
-      .maybeSingle();
-
-    if (!data) {
-      await supabase.from("scores").insert({
-        fid,
-        username,
-        total_score: finalScore,
-        last_play_date: new Date(),
-      });
-    } else {
-      await supabase
-        .from("scores")
-        .update({
-          total_score: data.total_score + finalScore,
-          last_play_date: new Date(),
-        })
-        .eq("fid", fid);
+    if (c.hasGem) {
+      // gem found → +100 bonus (on top of remaining)
+      nextReward = Math.max(0, nextReward) + 100
+      setReward(nextReward)
+      setStatus('WIN')
+      finishMutation.mutate(nextReward)
+      return
     }
 
-    setUserPoints((v) => v + finalScore);
-    setCanPlay(false);
-    const midnight = new Date();
-    midnight.setHours(24, 0, 0, 0);
-    setRetryInSeconds(Math.floor((midnight.getTime() - Date.now()) / 1000));
-  }
+    // no gem
+    const nextClicks = clicksLeft - 1
+    setClicksLeft(nextClicks)
+    setReward(Math.max(0, nextReward))
 
-  function clickCell(i: number) {
-    if (!canPlay || gameOver || revealed[i]) return;
-
-    const newRevealed = [...revealed];
-    newRevealed[i] = true;
-    setRevealed(newRevealed);
-
-    let newReward = reward - 1;
-    setReward(newReward);
-    setClicksLeft((v) => v - 1);
-
-    if (cells[i] === "gem") {
-      const winScore = newReward + BONUS_ON_WIN;
-      setGameOver(true);
-      setResult("WIN");
-      saveScore(winScore);
-    } else if (cells[i] === "bomb") {
-      const lost = newReward <= 0;
-      if (lost) {
-        setGameOver(true);
-        setResult("LOSE");
-        saveScore(MIN_REWARD_ON_FAIL);
-      }
-    } else {
-      if (clicksLeft - 1 <= 0) {
-        setGameOver(true);
-        setResult("LOSE");
-        saveScore(MIN_REWARD_ON_FAIL);
-      }
+    if (nextClicks <= 0) {
+      // out of tries
+      const finalR = Math.max(1, nextReward) // pain relief 1
+      setReward(finalR)
+      setStatus('LOSE')
+      finishMutation.mutate(finalR)
     }
   }
+
+  // ------- Header infos -------
+  const seconds = canPlayQuery.data?.seconds ?? secondsUntilMidnightUTC()
+  const mmss = useMemo(() => {
+    const m = Math.floor(seconds / 60)
+    const s = seconds % 60
+    return `${m}:${s.toString().padStart(2, '0')}`
+  }, [seconds])
 
   return (
-    <div style={{ textAlign: "center", background: "#000", color: "white", padding: 12 }}>
-      {avatar && <img src={avatar} width={60} height={60} style={{ borderRadius: "50%" }} />}
-      <h2>{username}</h2>
-      <p>Total Points: {userPoints}</p>
+    <div className="min-h-screen bg-black text-white flex flex-col items-center">
+      <header className="w-full max-w-3xl flex items-center justify-between px-4 py-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xl">💎 DIGBASE</span>
+        </div>
+        <div className="flex items-center gap-3">
+          {avatar ? <img src={avatar} alt="avatar" className="w-8 h-8 rounded-full" /> : null}
+          <span className="opacity-80">@{username}</span>
+          <span className="px-2 py-1 rounded bg-zinc-800">
+            {profileQuery.data?.points_total ?? 0} pts
+          </span>
+        </div>
+      </header>
 
-      {!canPlay ? (
-        <p>
-          You already played today. New game in: {retryInSeconds}s
-        </p>
-      ) : (
-        <>
-          <p>Reward: {reward}</p>
-          <p>Remaining clicks: {clicksLeft}</p>
-        </>
-      )}
+      <div className="mt-4 text-sm opacity-80">
+        {allowPlay ? 'Ready' : `Next game in ${mmss}`}
+      </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: `repeat(${GRID_SIZE}, 40px)`,
-          gap: 3,
-          margin: "20px auto",
-          width: GRID_SIZE * 42,
-        }}
-      >
-        {cells.map((cell, i) => {
-          const r = revealed[i];
-          let bg = "#444";
-          if (r && cell === "empty") bg = "green";
-          if (r && cell === "bomb") bg = "red";
-          if (r && cell === "gem") bg = "gold";
+      <div className="mt-3">Reward: {reward} • Remaining: {clicksLeft} • Status: {status}</div>
+
+      <div className="mt-6 grid"
+           style={{
+             gridTemplateColumns: `repeat(${BOARD_SIZE}, 44px)`,
+             gridTemplateRows: `repeat(${BOARD_SIZE}, 44px)`,
+             gap: '6px'
+           }}>
+        {board.map((c) => {
+          const bg = c.revealed
+            ? c.hasBomb
+              ? '#dc2626' // red
+              : c.hasGem
+                ? '#22c55e' // green gem
+                : '#16a34a' // safe revealed green
+            : '#4b5563' // hidden gray
+
+          const content = c.revealed
+            ? c.hasBomb
+              ? '💣'
+              : c.hasGem
+                ? '💎'
+                : ''
+            : ''
 
           return (
-            <div
-              key={i}
-              onClick={() => clickCell(i)}
+            <button
+              key={c.idx}
+              disabled={!allowPlay || c.revealed || status !== 'PLAYING'}
+              onClick={() => onCellClick(c)}
               style={{
-                width: 40,
-                height: 40,
+                width: 44, height: 44,
                 background: bg,
-                cursor: canPlay && !gameOver ? "pointer" : "default",
-                border: "1px solid #111",
+                borderRadius: 4,
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
               }}
             >
-              {r && cell === "bomb" && "💣"}
-              {r && cell === "gem" && "💎"}
-            </div>
-          );
+              <span style={{ fontSize: 20 }}>{content}</span>
+            </button>
+          )
         })}
       </div>
 
-      {gameOver && <h2>{result === "WIN" ? "WIN!" : "LOSE"}</h2>}
+      {(status === 'WIN' || status === 'LOSE') && (
+        <div className="mt-6 text-sm opacity-80">
+          Saved. Come back tomorrow!
+        </div>
+      )}
     </div>
-  );
+  )
 }
