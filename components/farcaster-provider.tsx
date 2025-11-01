@@ -1,3 +1,5 @@
+"use client";
+
 import type { Context } from '@farcaster/frame-sdk'
 import sdk from '@farcaster/frame-sdk'
 import { useQuery } from '@tanstack/react-query'
@@ -18,16 +20,16 @@ const FrameProviderContext = createContext<FrameContextValue | undefined>(
 export function useFrame() {
   const context = useContext(FrameProviderContext)
   if (context === undefined) {
-    throw new Error('useFrame must be used within a FrameProvider')
+    throw new Error('useFrame must be used within a FarcasterProvider')
   }
   return context
 }
 
-interface FrameProviderProps {
+interface FarcasterProviderProps {
   children: ReactNode
 }
 
-export function FrameProvider({ children }: FrameProviderProps) {
+export function FarcasterProvider({ children }: FarcasterProviderProps) {
   const farcasterContextQuery = useQuery({
     queryKey: ['farcaster-context'],
     queryFn: async () => {
@@ -58,3 +60,5 @@ export function FrameProvider({ children }: FrameProviderProps) {
     </FrameProviderContext.Provider>
   )
 }
+
+export default FarcasterProvider;
