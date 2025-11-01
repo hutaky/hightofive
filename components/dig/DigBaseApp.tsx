@@ -1,172 +1,137 @@
 "use client";
+
 import { useState, useEffect } from "react";
-import Image from "next/image";
-import { supabase } from "@/lib/supabase";
 
 const GRID_SIZE = 7;
 const TOTAL_CELLS = GRID_SIZE * GRID_SIZE;
-const MAX_CLICKS = 30;
-const START_REWARD = 250;
 
+// Returns random positions for gem and bombs
 function generateBoard() {
   const gemIndex = Math.floor(Math.random() * TOTAL_CELLS);
-  const bombs = new Set<number>();
 
+  const bombs = new Set<number>();
   while (bombs.size < 3) {
     const index = Math.floor(Math.random() * TOTAL_CELLS);
     if (index !== gemIndex) bombs.add(index);
   }
 
-  const cells = Array(TOTAL_CELLS).fill({ type: "empty" });
-  cells[gemIndex] = { type: "gem" };
-  Array.from(bombs).forEach((b) => (cells[b] = { type: "bomb" }));
+  console.log("✅ Board generated:", { gemIndex, bombs: [...bombs] });
 
-  return { cells, gemIndex, bombIndexes: Array.from(bombs) };
-}
-
-function timeUntilMidnight(): number {
-  const now = new Date();
-  const midnight = new Date();
-  midnight.setHours(24, 0, 0, 0);
-  return Math.ceil((midnight.getTime() - now.getTime()) / 1000);
+  return {
+    gemIndex,
+    bombs: [...bombs],
+  };
 }
 
 export default function DigBaseApp() {
-  const [board, setBoard] = useState<any | null>(null);
-  const [clicked, setClicked] = useState<number[]>([]);
-  const [remainingClicks, setRemainingClicks] = useState(MAX_CLICKS);
-  const [reward, setReward] = useState(START_REWARD);
-  const [gameOver, setGameOver] = useState(false);
-  const [hasPlayedToday, setHasPlayedToday] = useState(false);
-  const [countdown, setCountdown] = useState(timeUntilMidnight());
-  const [username, setUsername] = useState<string | null>(null);
+  const [board, setBoard] = useState<{ gemIndex: number; bombs: number[] }>();
+  const [revealed, setRevealed] = useState<number[]>([]);
+  const [remainingClicks, setRemainingClicks] = useState(30);
+  const [reward, setReward] = useState(250);
+  const [status, setStatus] = useState("PLAYING");
 
   useEffect(() => {
-    async function loadUser() {
-      const { data } = await supabase.auth.getUser();
-      if (data?.user) {
-        setUsername(data.user.email || "Player");
-        checkGameStatus();
-      }
-    }
-    loadUser();
+    const b = generateBoard();
+    setBoard(b);
   }, []);
-
-  async function checkGameStatus() {
-    const today = new Date().toISOString().slice(0, 10);
-
-    const { data } = await supabase
-      .from("scores")
-      .select("*")
-      .eq("date", today)
-      .maybeSingle();
-
-    if (data) {
-      setHasPlayedToday(true);
-    }
-  }
-
-  useEffect(() => {
-    setBoard(generateBoard());
-  }, []);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCountdown(timeUntilMidnight());
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  async function saveScore(finalReward: number) {
-    const today = new Date().toISOString().slice(0, 10);
-    await supabase.from("scores").insert([{ score: finalReward, date: today }]);
-  }
 
   function handleClick(index: number) {
-    if (!board || clicked.includes(index) || gameOver || hasPlayedToday) return;
+    if (!board || status !== "PLAYING" || revealed.includes(index)) return;
 
-    const newClicked = [...clicked, index];
-    setClicked(newClicked);
+    console.log("Clicked:", index);
+
+    setRevealed((prev) => [...prev, index]);
     setRemainingClicks((prev) => prev - 1);
+    setReward((prev) => prev - 1);
 
-    const cell = board.cells[index];
-
-    if (cell.type === "bomb") {
-      const reduced = Math.max(1, Math.round(reward * 0.9));
-      setReward(reduced);
-    } else if (cell.type === "gem") {
-      const finalReward = reward + 100;
-      setReward(finalReward);
-      setGameOver(true);
-      saveScore(finalReward);
-      return;
-    } else {
-      setReward((prev) => Math.max(1, prev - 1));
+    if (index === board.gemIndex) {
+      setStatus("WIN");
+      setReward((r) => r + 100);
+    } else if (board.bombs.includes(index)) {
+      setReward((prev) => Math.max(1, Math.round(prev * 0.9)));
     }
 
-    if (remainingClicks - 1 <= 0) {
-      setGameOver(true);
-      const finalReward = Math.max(1, reward);
-      saveScore(finalReward);
+    if (remainingClicks - 1 === 0 && index !== board.gemIndex) {
+      setStatus("LOSE");
+      setReward(1);
     }
   }
 
-  function formatTime(seconds: number) {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-    return `${h}h ${m}m ${s}s`;
-  }
-
-  if (!board) return <div className="text-white">Loading game…</div>;
+  if (!board) return <div style={{ color: "white" }}>Loading...</div>;
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col items-center p-4">
+    <div
+      style={{
+        width: "100%",
+        minHeight: "100vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: "black",
+        flexDirection: "column",
+        color: "white",
+      }}
+    >
+      <h2>DIGBASE</h2>
+      <p>Reward: {reward}</p>
+      <p>Remaining: {remainingClicks}</p>
+      <p>Status: {status}</p>
 
-      <h1 className="text-3xl font-bold mb-2">DIGBASE</h1>
-      {username && <p>Logged in as: {username}</p>}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: `repeat(${GRID_SIZE}, 40px)`,
+          gap: "5px",
+          marginTop: "20px",
+        }}
+      >
+        {Array.from({ length: TOTAL_CELLS }).map((_, index) => {
+          const isGem = board.gemIndex === index && revealed.includes(index);
+          const isBomb = board.bombs.includes(index) && revealed.includes(index);
+          const isRevealed = revealed.includes(index);
 
-      {hasPlayedToday ? (
-        <div className="mt-4 text-center">
-          <p className="text-xl font-semibold">Már játszottál ma! ✅</p>
-          <p className="text-sm text-gray-400">
-            Következő játék: {formatTime(countdown)}
-          </p>
-        </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-7 gap-1 mt-4">
-            {board.cells.map((cell: any, idx: number) => {
-              const wasClicked = clicked.includes(idx);
-              let bg = "bg-green-800";
+          return (
+            <div
+              key={index}
+              onClick={() => handleClick(index)}
+              style={{
+                width: "40px",
+                height: "40px",
+                backgroundColor: isRevealed
+                  ? isGem
+                    ? "gold"
+                    : isBomb
+                    ? "red"
+                    : "grey"
+                  : "green",
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                fontSize: "18px",
+                cursor: "pointer",
+              }}
+            >
+              {isGem && "💎"}
+              {isBomb && "💣"}
+            </div>
+          );
+        })}
+      </div>
 
-              if (wasClicked && cell.type === "bomb") bg = "bg-red-600";
-              if (wasClicked && cell.type === "gem") bg = "bg-yellow-400";
-              if (wasClicked && cell.type === "empty") bg = "bg-black";
-
-              return (
-                <div
-                  key={idx}
-                  onClick={() => handleClick(idx)}
-                  className={`${bg} w-10 h-10 cursor-pointer flex items-center justify-center border border-gray-700`}
-                >
-                  {wasClicked && cell.type === "gem" && (
-                    <Image src="/images/gem.png" alt="gem" width={20} height={20} />
-                  )}
-                  {wasClicked && cell.type === "bomb" && (
-                    <Image src="/images/bomb.png" alt="bomb" width={20} height={20} />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="mt-4 text-center">
-            <p>Kattintások: {remainingClicks}/{MAX_CLICKS}</p>
-            <p>Jutalom: {reward}</p>
-            {gameOver && <p className="text-yellow-200">Játék vége ✅</p>}
-          </div>
-        </>
+      {status !== "PLAYING" && (
+        <button
+          style={{ marginTop: "20px", padding: "10px" }}
+          onClick={() => {
+            const b = generateBoard();
+            setBoard(b);
+            setRevealed([]);
+            setRemainingClicks(30);
+            setReward(250);
+            setStatus("PLAYING");
+          }}
+        >
+          Play Again
+        </button>
       )}
     </div>
   );
