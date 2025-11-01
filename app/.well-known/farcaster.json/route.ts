@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
-import { APP_URL } from "../../../lib/constants";
+import { APP_URL } from "@/lib/constants";
 
 export async function GET() {
-  const farcasterConfig = {
-    // TODO: Add account association
+  return NextResponse.json({
+    accountAssociation: {
+      header: "eyJmaWQiOjUxMTg0MywidHlwZSI6ImF1dGgiLCJrZXkiOiIweEVhQTJhNjkwRmIzZTExMDU0NDAxN0VmYTAyYmFjNmFGYWE3RTUyNTMifQ",
+      payload: "eyJkb21haW4iOiJoaWdodG9maXZlLnZlcmNlbC5hcHAifQ",
+      signature: "QT4Ku+gp3L1/1y2JLPuAKRDBgVNTydRDDixD+uhqEnwV2MhUiKXQP+hMEAlVC7R21dRQanxFkDAJ/uqfXG1yCBs="
+    },
     frame: {
       version: "1",
       name: "DigBase App",
@@ -15,10 +19,8 @@ export async function GET() {
       primaryCategory: "developer-tools",
       buttonTitle: "Launch Template",
       splashImageUrl: `${APP_URL}/images/splash.png`,
-      splashBackgroundColor: "#ffffff",
+      splashBackgroundColor: "#ffffff`,
       webhookUrl: `${APP_URL}/api/webhook`,
     },
-  };
-
-  return NextResponse.json(farcasterConfig);
+  });
 }
