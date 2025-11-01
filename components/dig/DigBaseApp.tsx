@@ -6,22 +6,24 @@ import { motion } from "framer-motion";
 import { Diamond } from "lucide-react";
 
 export default function DigBaseApp() {
-  const { context, isSDKLoaded, actions } = useFrame();
+  const { context, isSDKLoaded } = useFrame();
 
   const [score, setScore] = useState<number>(0);
   const [entries, setEntries] = useState<number[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
-  // ❗ DEMO MODE KIKAPCSOLVA: ha nincs Farcaster context → álljunk meg
   useEffect(() => {
-    if (!isSDKLoaded || !context?.user?.fid) {
-      console.warn("Farcaster context not ready. Waiting for real session.");
+    if (!isSDKLoaded) {
+      console.warn("Waiting for Farcaster session...");
+    }
+    if (isSDKLoaded && !context?.user?.fid) {
+      console.error("Farcaster loaded, but user has no FID!");
     }
   }, [isSDKLoaded, context]);
 
   const handleDig = async () => {
     if (!isSDKLoaded || !context?.user?.fid) {
-      console.error("User not authenticated from Farcaster!");
+      alert("⚠ You must open this in Farcaster MiniApp mode!");
       return;
     }
 
@@ -33,19 +35,12 @@ export default function DigBaseApp() {
       setScore((prev) => prev + earned);
       setEntries((prev) => [...prev, earned]);
 
-      // ✅ REAL: Save to Supabase backend
       await fetch("/api/save-score", {
         method: "POST",
         body: JSON.stringify({
           fid: context.user.fid,
           points: earned,
         }),
-      });
-
-      // ✅ Visual celebration (no demo fallback)
-      actions?.openPopup({
-        title: `+${earned} DIG`,
-        description: `Nice!`,
       });
     } catch (err) {
       console.error("Supabase save failed:", err);
@@ -64,8 +59,9 @@ export default function DigBaseApp() {
 
   if (!context?.user?.fid) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-red-400">
-        ⚠ Error: User not logged in through Farcaster.
+      <div className="min-h-screen flex items-center justify-center text-red-400 p-8 text-center">
+        ⚠ Error: no Farcaster login detected.<br />
+        Open this only as a miniapp inside Farcaster.
       </div>
     );
   }
