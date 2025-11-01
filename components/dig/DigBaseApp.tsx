@@ -1,3 +1,4 @@
+
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
@@ -23,25 +24,24 @@ const BOARD_SIZE = 7
 const TOTAL_CELLS = BOARD_SIZE * BOARD_SIZE
 const CLICKS_MAX = 30
 
-function genBoard(seed?: string) {
-  // random but stable per seed if provided (optional)
-  const rand = Math.random
-  const gemIndex = Math.floor(rand() * TOTAL_CELLS)
+function genBoard() {
+  const gemIndex = Math.floor(Math.random() * TOTAL_CELLS)
 
-  const bombs = new Set<number>()
-  while (bombs.size < 3) {
-    const b = Math.floor(rand() * TOTAL_CELLS)
-    if (b !== gemIndex) bombs.add(b)
+  const bombsSet = new Set<number>()
+  while (bombsSet.size < 3) {
+    const b = Math.floor(Math.random() * TOTAL_CELLS)
+    if (b !== gemIndex) bombsSet.add(b)
   }
+  const bombIndexes = Array.from(bombsSet.values())
 
   const cells: Cell[] = Array.from({ length: TOTAL_CELLS }, (_, idx) => ({
     idx,
     hasGem: idx === gemIndex,
-    hasBomb: bombs.has(idx),
+    hasBomb: bombsSet.has(idx),
     revealed: false,
   }))
 
-  return { cells, gemIndex, bombIndexes: Array.from(bombs) }
+  return { cells, gemIndex, bombIndexes }
 }
 
 function secondsUntilMidnightUTC() {
@@ -54,9 +54,8 @@ export default function DigBaseApp() {
   const { context } = useFrame()
   const fid = context?.user?.fid
   const username = context?.user?.username || 'guest'
-  const avatar = context?.user?.pfpUrl || "/images/default-avatar.png"
+  const avatar = (context as any)?.user?.pfpUrl || '/images/default-avatar.png'
 
-  // ------- Profile load/upsert -------
   const profileQuery = useQuery<Profile>({
     queryKey: ['profile', fid || 'guest'],
     enabled: !!fid,
@@ -81,21 +80,21 @@ export default function DigBaseApp() {
     },
   })
 
-  // ------- Game state -------
   const [board, setBoard] = useState<Cell[]>([])
   const [reward, setReward] = useState<number>(250)
   const [clicksLeft, setClicksLeft] = useState<number>(CLICKS_MAX)
   const [status, setStatus] = useState<'IDLE' | 'PLAYING' | 'WIN' | 'LOSE'>('IDLE')
-  const allowPlay = (canPlayQuery.data?.canPlay ?? true) && status !== 'PLAYING' && status !== 'WIN' && status !== 'LOSE'
+
+  const allowClick = (canPlayQuery.data?.canPlay ?? true) && status === 'PLAYING'
 
   useEffect(() => {
-    setBoard(genBoard().cells)
+    const { cells } = genBoard()
+    setBoard(cells)
     setReward(250)
     setClicksLeft(CLICKS_MAX)
     setStatus('PLAYING')
-  }, [fid]) // new user/context resets board
+  }, [fid])
 
-  // ------- Finish mutation (save to supabase) -------
   const finishMutation = useMutation({
     mutationFn: async (finalReward: number) => {
       const res = await fetch('/api/finish', {
@@ -109,25 +108,19 @@ export default function DigBaseApp() {
   })
 
   const onCellClick = (c: Cell) => {
-    if (status !== 'PLAYING') return
-    if (!allowPlay) return
+    if (!allowClick) return
     if (c.revealed) return
 
     const newBoard = board.slice()
     newBoard[c.idx] = { ...c, revealed: true }
     setBoard(newBoard)
 
-    // every click costs -1
-    const nextRewardRaw = reward - 1
-    let nextReward = nextRewardRaw
-
+    let nextReward = reward - 1
     if (c.hasBomb) {
-      // -10%
-      nextReward = Math.floor(nextRewardRaw - nextRewardRaw * 0.1)
+      nextReward = Math.round(nextReward - nextReward * 0.1)
     }
 
     if (c.hasGem) {
-      // gem found → +100 bonus (on top of remaining)
       nextReward = Math.max(0, nextReward) + 100
       setReward(nextReward)
       setStatus('WIN')
@@ -135,21 +128,18 @@ export default function DigBaseApp() {
       return
     }
 
-    // no gem
     const nextClicks = clicksLeft - 1
     setClicksLeft(nextClicks)
     setReward(Math.max(0, nextReward))
 
     if (nextClicks <= 0) {
-      // out of tries
-      const finalR = Math.max(1, nextReward) // pain relief 1
+      const finalR = Math.max(1, nextReward)
       setReward(finalR)
       setStatus('LOSE')
       finishMutation.mutate(finalR)
     }
   }
 
-  // ------- Header infos -------
   const seconds = canPlayQuery.data?.seconds ?? secondsUntilMidnightUTC()
   const mmss = useMemo(() => {
     const m = Math.floor(seconds / 60)
@@ -166,52 +156,31 @@ export default function DigBaseApp() {
         <div className="flex items-center gap-3">
           {avatar ? <img src={avatar} alt="avatar" className="w-8 h-8 rounded-full" /> : null}
           <span className="opacity-80">@{username}</span>
-          <span className="px-2 py-1 rounded bg-zinc-800">
-            {profileQuery.data?.points_total ?? 0} pts
-          </span>
+          <span className="px-2 py-1 rounded bg-zinc-800">{profileQuery.data?.points_total ?? 0} pts</span>
         </div>
       </header>
 
       <div className="mt-4 text-sm opacity-80">
-        {allowPlay ? 'Ready' : `Next game in ${mmss}`}
+        {status === 'PLAYING' ? 'Ready' : `Next game in ${mmss}`}
       </div>
 
       <div className="mt-3">Reward: {reward} • Remaining: {clicksLeft} • Status: {status}</div>
 
       <div className="mt-6 grid"
-           style={{
-             gridTemplateColumns: `repeat(${BOARD_SIZE}, 44px)`,
-             gridTemplateRows: `repeat(${BOARD_SIZE}, 44px)`,
-             gap: '6px'
-           }}>
+           style={{ gridTemplateColumns: `repeat(${BOARD_SIZE}, 44px)`, gridTemplateRows: `repeat(${BOARD_SIZE}, 44px)`, gap: '6px' }}>
         {board.map((c) => {
           const bg = c.revealed
-            ? c.hasBomb
-              ? '#dc2626' // red
-              : c.hasGem
-                ? '#22c55e' // green gem
-                : '#16a34a' // safe revealed green
-            : '#4b5563' // hidden gray
+            ? c.hasBomb ? '#dc2626' : (c.hasGem ? '#22c55e' : '#16a34a')
+            : '#4b5563'
 
-          const content = c.revealed
-            ? c.hasBomb
-              ? '💣'
-              : c.hasGem
-                ? '💎'
-                : ''
-            : ''
+          const content = c.revealed ? (c.hasBomb ? '💣' : (c.hasGem ? '💎' : '')) : ''
 
           return (
             <button
               key={c.idx}
-              disabled={!allowPlay || c.revealed || status !== 'PLAYING'}
+              disabled={!allowClick || c.revealed}
               onClick={() => onCellClick(c)}
-              style={{
-                width: 44, height: 44,
-                background: bg,
-                borderRadius: 4,
-                display: 'flex', alignItems: 'center', justifyContent: 'center'
-              }}
+              style={{ width: 44, height: 44, background: bg, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
               <span style={{ fontSize: 20 }}>{content}</span>
             </button>

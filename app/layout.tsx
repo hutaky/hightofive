@@ -1,9 +1,10 @@
-import './globals.css'
+
 import type { Metadata } from 'next'
+import './globals.css'
 import { Providers } from '@/components/providers'
 
 export const metadata: Metadata = {
-  title: 'DIG BASE',
+  title: 'DIGBASE',
   description: '7x7 daily dig game',
 }
 

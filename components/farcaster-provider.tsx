@@ -1,3 +1,4 @@
+
 'use client'
 
 import type { Context } from '@farcaster/frame-sdk'
@@ -21,7 +22,7 @@ export function useFrame() {
   return ctx
 }
 
-export function FrameProvider({ children }: { children: ReactNode }) {
+export function FrameProvider({ children }: { children: React.ReactNode }) {
   const q = useQuery({
     queryKey: ['farcaster-context'],
     queryFn: async () => {
@@ -29,23 +30,20 @@ export function FrameProvider({ children }: { children: ReactNode }) {
       try {
         await sdk.actions.ready()
         return { context, ready: true }
-      } catch {
+      } catch (e) {
+        console.warn('SDK ready() failed', e)
         return { context, ready: false }
       }
-    },
+    }
   })
 
-  return (
-    <FrameProviderContext.Provider
-      value={{
-        context: q.data?.context,
-        actions: sdk.actions,
-        isLoading: q.isPending,
-        isSDKLoaded: Boolean(q.data?.ready && q.data?.context),
-        isEthProviderAvailable: Boolean(sdk.wallet.ethProvider),
-      }}
-    >
-      {children}
-    </FrameProviderContext.Provider>
-  )
+  const value: FrameContextValue = {
+    context: q.data?.context,
+    isLoading: q.isPending,
+    isSDKLoaded: !!q.data?.ready && !!q.data?.context,
+    isEthProviderAvailable: !!sdk.wallet.ethProvider,
+    actions: sdk.actions
+  }
+
+  return <FrameProviderContext.Provider value={value}>{children}</FrameProviderContext.Provider>
 }

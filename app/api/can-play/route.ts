@@ -1,11 +1,6 @@
-import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase'
 
-function isSameUTCDate(a: Date, b: Date) {
-  return a.getUTCFullYear() === b.getUTCFullYear() &&
-         a.getUTCMonth() === b.getUTCMonth() &&
-         a.getUTCDate() === b.getUTCDate()
-}
+import { NextResponse } from 'next/server'
+import { getServerClient } from '@/lib/supabase'
 
 function secondsUntilMidnightUTC() {
   const now = new Date()
@@ -15,18 +10,25 @@ function secondsUntilMidnightUTC() {
 
 export async function GET(req: Request) {
   const url = new URL(req.url)
-  const fid = Number(url.searchParams.get('fid') || 0)
-  if (!fid) return NextResponse.json({ canPlay: true, seconds: secondsUntilMidnightUTC() })
+  const fid = url.searchParams.get('fid')
 
-  const db = supabaseServer()
-  const { data } = await db.from('dig_profiles').select('last_play_at').eq('fid', fid).maybeSingle()
+  if (!fid) return NextResponse.json({ canPlay: false, seconds: secondsUntilMidnightUTC() })
 
-  if (!data?.last_play_at) {
+  const db = getServerClient()
+
+  const start = new Date()
+  start.setUTCHours(0,0,0,0)
+  const { data, error } = await db
+    .from('plays')
+    .select('id')
+    .eq('fid', Number(fid))
+    .gte('played_at', start.toISOString())
+    .limit(1)
+
+  if (error) {
     return NextResponse.json({ canPlay: true, seconds: secondsUntilMidnightUTC() })
   }
 
-  const last = new Date(data.last_play_at)
-  const now = new Date()
-  const can = !isSameUTCDate(last, now)
-  return NextResponse.json({ canPlay: can, seconds: secondsUntilMidnightUTC() })
+  const canPlay = (data?.length ?? 0) === 0
+  return NextResponse.json({ canPlay, seconds: secondsUntilMidnightUTC() })
 }
