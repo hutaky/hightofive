@@ -4,9 +4,11 @@ import { APP_URL } from "@/lib/constants";
 export async function GET() {
   return NextResponse.json({
     accountAssociation: {
-      header: "eyJmaWQiOjUxMTg0MywidHlwZSI6ImF1dGgiLCJrZXkiOiIweEVhQTJhNjkwRmIzZTExMDU0NDAxN0VmYTAyYmFjNmFGYWE3RTUyNTMifQ",
+      header:
+        "eyJmaWQiOjUxMTg0MywidHlwZSI6ImF1dGgiLCJrZXkiOiIweEVhQTJhNjkwRmIzZTExMDU0NDAxN0VmYTAyYmFjNmFGYWE3RTUyNTMifQ",
       payload: "eyJkb21haW4iOiJoaWdodG9maXZlLnZlcmNlbC5hcHAifQ",
-      signature: "QT4Ku+gp3L1/1y2JLPuAKRDBgVNTydRDDixD+uhqEnwV2MhUiKXQP+hMEAlVC7R21dRQanxFkDAJ/uqfXG1yCBs="
+      signature:
+        "QT4Ku+gp3L1/1y2JLPuAKRDBgVNTydRDDixD+uhqEnwV2MhUiKXQP+hMEAlVC7R21dRQanxFkDAJ/uqfXG1yCBs=",
     },
     frame: {
       version: "1",
@@ -15,12 +17,12 @@ export async function GET() {
       homeUrl: `${APP_URL}`,
       imageUrl: `${APP_URL}/images/feed.png`,
       screenshotUrls: [],
-      tags: ["monad", "farcaster", "miniapp", "template"],
-      primaryCategory: "developer-tools",
-      buttonTitle: "Launch Template",
+      tags: ["game", "base", "dig"],
+      primaryCategory: "games",
+      buttonTitle: "DIG!",
       splashImageUrl: `${APP_URL}/images/splash.png`,
-      splashBackgroundColor: "#ffffff",
-      webhookUrl: `${APP_URL}/api/webhook`
+      splashBackgroundColor: "#000000",
+      webhookUrl: `${APP_URL}/api/webhook`,
     },
   });
 }
