@@ -54,7 +54,8 @@ export default function DigBaseApp() {
   const { context } = useFrame()
   const fid = context?.user?.fid
   const username = context?.user?.username || 'guest'
-  const avatar = context?.user?.profileImage?.url
+  const avatar = context?.user?.pfp?.url || "/images/default-avatar.png"
+
 
   // ------- Profile load/upsert -------
   const profileQuery = useQuery<Profile>({
