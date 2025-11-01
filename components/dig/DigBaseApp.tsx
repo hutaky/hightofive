@@ -1,125 +1,112 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useFrame } from "@/components/farcaster-provider";
 import { motion } from "framer-motion";
-import { createClient } from "@supabase/supabase-js";
-import { Loader2, Gem, Wallet } from "lucide-react";
+import { Diamond } from "lucide-react";
 
-type GemHit = {
-  xpos: number;
-  ypos: number;
-  gem: "blue" | "purple" | "red";
-  points: number;
-};
+export default function DigBaseApp() {
+  const { context, isSDKLoaded, actions } = useFrame();
 
-const GEM_TYPES = [
-  { key: "blue", label: "Blue Gem", mult: 1, color: "text-sky-400" },
-  { key: "purple", label: "Purple Gem", mult: 2, color: "text-purple-400" },
-  { key: "red", label: "Red Gem", mult: 3, color: "text-red-400" },
-] as const;
+  const [score, setScore] = useState<number>(0);
+  const [entries, setEntries] = useState<number[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
 
-const DigBaseApp = () => {
-  const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
-  const [points, setPoints] = useState(0);
-  const [hits, setHits] = useState<GemHit[]>([]);
-  const [digging, setDigging] = useState(false);
-
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-
-  // Fake auth (később Farcaster auth lesz)
+  // ❗ DEMO MODE KIKAPCSOLVA: ha nincs Farcaster context → álljunk meg
   useEffect(() => {
-    const fake = { id: "demo-user", name: "Demo User", points: 0 };
-    setUser(fake);
-    setLoading(false);
-  }, []);
+    if (!isSDKLoaded || !context?.user?.fid) {
+      console.warn("Farcaster context not ready. Waiting for real session.");
+    }
+  }, [isSDKLoaded, context]);
 
-  const dig = async () => {
-    if (digging) return;
-    setDigging(true);
+  const handleDig = async () => {
+    if (!isSDKLoaded || !context?.user?.fid) {
+      console.error("User not authenticated from Farcaster!");
+      return;
+    }
 
-    const gem = GEM_TYPES[Math.floor(Math.random() * GEM_TYPES.length)];
-    const gained = gem.mult * (10 + Math.floor(Math.random() * 10));
+    setIsSaving(true);
 
-    const newHit: GemHit = {
-      xpos: Math.random() * 100,
-      ypos: Math.random() * 100,
-      gem: gem.key,
-      points: gained,
-    };
+    try {
+      const earned = Math.floor(Math.random() * 20) + 1;
 
-    setHits((prev) => [...prev, newHit]);
-    setPoints((prev) => prev + gained);
+      setScore((prev) => prev + earned);
+      setEntries((prev) => [...prev, earned]);
 
-    // save to supabase (optional demo)
-    await supabase.from("dig_hits").insert({
-      user_id: user?.id,
-      gem: newHit.gem,
-      points: newHit.points,
-    });
+      // ✅ REAL: Save to Supabase backend
+      await fetch("/api/save-score", {
+        method: "POST",
+        body: JSON.stringify({
+          fid: context.user.fid,
+          points: earned,
+        }),
+      });
 
-    setDigging(false);
+      // ✅ Visual celebration (no demo fallback)
+      actions?.openPopup({
+        title: `+${earned} DIG`,
+        description: `Nice!`,
+      });
+    } catch (err) {
+      console.error("Supabase save failed:", err);
+    }
+
+    setIsSaving(false);
   };
 
-  if (loading) {
+  if (!isSDKLoaded) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
-        <Loader2 className="animate-spin w-6 h-6" />
+      <div className="min-h-screen flex items-center justify-center text-white">
+        Loading Farcaster session...
+      </div>
+    );
+  }
+
+  if (!context?.user?.fid) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-red-400">
+        ⚠ Error: User not logged in through Farcaster.
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      <header className="sticky top-0 z-30 backdrop-blur bg-slate-950/60 border-b border-slate-800">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Gem className="text-sky-400 w-6 h-6" />
-            <span className="font-bold text-lg">DIG BASE</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Wallet className="w-5 h-5" />
-            <span>{points} pts</span>
-          </div>
+    <div className="min-h-screen bg-[#0a0f1e] text-white">
+      <header className="flex justify-between p-4 border-b border-gray-700">
+        <div className="flex gap-2 items-center text-xl">
+          <Diamond className="text-blue-400" />
+          DIG BASE
+        </div>
+
+        <div className="flex gap-2 items-center">
+          <span>{score} pts</span>
         </div>
       </header>
 
-      <main className="flex-1 max-w-6xl mx-auto px-4 py-8">
+      <div className="flex flex-col items-center py-6">
         <button
-          onClick={dig}
-          disabled={digging}
-          className="px-6 py-3 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:bg-slate-700 font-semibold"
+          onClick={handleDig}
+          disabled={isSaving}
+          className="bg-blue-500 hover:bg-blue-600 px-6 py-3 rounded-xl font-bold text-white"
         >
-          {digging ? "Digging..." : "DIG!"}
+          {isSaving ? "Saving..." : "DIG!"}
         </button>
 
-        <div className="relative mt-10 w-full h-[400px] border border-slate-800 rounded-xl overflow-hidden bg-slate-900">
-          {hits.map((hit, i) => {
-            const gemType = GEM_TYPES.find((g) => g.key === hit.gem)!;
-            return (
-              <motion.div
-                key={i}
-                className="absolute flex items-center gap-1 font-bold"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.4 }}
-                style={{
-                  top: `${hit.ypos}%`,
-                  left: `${hit.xpos}%`,
-                }}
-              >
-                <Gem className={`${gemType.color} w-5 h-5`} />
-                <span className={gemType.color}>+{hit.points}</span>
-              </motion.div>
-            );
-          })}
+        <div className="relative mt-8 h-[400px] w-[200px] bg-slate-900/30 rounded-xl overflow-hidden flex flex-col items-center pt-10">
+          {entries.map((v, idx) => (
+            <motion.div
+              key={idx}
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25 }}
+              className="flex items-center gap-2 text-lg"
+            >
+              <Diamond size={18} className="text-cyan-400" />
+              +{v}
+            </motion.div>
+          ))}
         </div>
-      </main>
+      </div>
     </div>
   );
-};
-
-export default DigBaseApp;
+}
