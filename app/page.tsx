@@ -1,3 +1,10 @@
-import DigBaseApp from '@/components/dig/DigBaseApp'
+import DigBaseApp from "@/components/dig/DigBaseApp";
+import { FarcasterProvider } from "@/components/farcaster-provider";
 
-export default function Page(){return <DigBaseApp />}
+export default function Home() {
+  return (
+    <FarcasterProvider>
+      <DigBaseApp />
+    </FarcasterProvider>
+  );
+}
